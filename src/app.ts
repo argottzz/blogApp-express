@@ -28,7 +28,8 @@ const storage = multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (_req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase();
-        const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const unique =
+            Date.now() + "-" + Math.round(Math.random() * 1e9);
 
         cb(null, unique + ext);
     },
@@ -61,7 +62,11 @@ const fileFilter: multer.Options["fileFilter"] = (
     ) {
         cb(null, true);
     } else {
-        cb(new Error("Hanya file jpg, png, webp yang diperbolehkan"));
+        cb(
+            new Error(
+                "Hanya file jpg, png, webp yang diperbolehkan"
+            )
+        );
     }
 };
 
@@ -75,15 +80,18 @@ const upload = multer({
 
 const kategoriSchema = z.object({
     nama_kategori: z.string().min(1).max(100),
-    deskripsi_kategori: z.string().min(1),
+});
+
+const penerbitSchema = z.object({
+    nama_penerbit: z.string().min(1).max(100),
 });
 
 const artikelSchema = z.object({
     id_kategori: z.coerce.number().int().positive(),
+    id_penerbit: z.coerce.number().int().positive(),
     judul_artikel: z.string().min(1).max(200),
     isi_artikel: z.string().min(1),
     penulis_artikel: z.string().min(1).max(100),
-    penerbit_artikel: z.string().min(1).max(100),
 });
 
 function deleteFileIfExists(
@@ -103,10 +111,10 @@ function deleteFileIfExists(
     } catch {}
 }
 
-app.get("/api/kategori", async (req, res) => {
+app.get("/api/kategori", async (_req, res) => {
     try {
         const [rows] = await pool.query(
-            "SELECT * FROM kategori"
+            "SELECT * FROM kategori ORDER BY id_kategori ASC"
         );
 
         res.json({
@@ -122,7 +130,9 @@ app.get("/api/kategori", async (req, res) => {
 
 app.post("/api/kategori", async (req, res) => {
     try {
-        const validation = kategoriSchema.safeParse(req.body);
+        const validation = kategoriSchema.safeParse(
+            req.body
+        );
 
         if (!validation.success) {
             return res.status(400).json({
@@ -131,25 +141,25 @@ app.post("/api/kategori", async (req, res) => {
             });
         }
 
-        const {
-            nama_kategori,
-            deskripsi_kategori,
-        } = validation.data;
+        const { nama_kategori } = validation.data;
 
         await pool.query(
             `INSERT INTO kategori
-            (nama_kategori, deskripsi_kategori)
-            VALUES (?, ?)`,
-            [
-                nama_kategori,
-                deskripsi_kategori,
-            ]
+            (nama_kategori)
+            VALUES (?)`,
+            [nama_kategori]
         );
 
         res.status(201).json({
             message: "Berhasil menambahkan kategori",
         });
-    } catch (error) {
+    } catch (error: any) {
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                message: "Nama kategori sudah digunakan",
+            });
+        }
+
         res.status(500).json({
             message: "Gagal menambahkan kategori",
         });
@@ -159,6 +169,12 @@ app.post("/api/kategori", async (req, res) => {
 app.put("/api/kategori/:id", async (req, res) => {
     try {
         const id = Number(req.params.id);
+
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({
+                message: "ID kategori tidak valid",
+            });
+        }
 
         const validation = kategoriSchema.safeParse(
             req.body
@@ -171,19 +187,14 @@ app.put("/api/kategori/:id", async (req, res) => {
             });
         }
 
-        const {
-            nama_kategori,
-            deskripsi_kategori,
-        } = validation.data;
+        const { nama_kategori } = validation.data;
 
         const [result]: any = await pool.query(
             `UPDATE kategori
-            SET nama_kategori = ?,
-                deskripsi_kategori = ?
+            SET nama_kategori = ?
             WHERE id_kategori = ?`,
             [
                 nama_kategori,
-                deskripsi_kategori,
                 id,
             ]
         );
@@ -197,7 +208,13 @@ app.put("/api/kategori/:id", async (req, res) => {
         res.json({
             message: "Berhasil mengubah kategori",
         });
-    } catch (error) {
+    } catch (error: any) {
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                message: "Nama kategori sudah digunakan",
+            });
+        }
+
         res.status(500).json({
             message: "Gagal mengubah kategori",
         });
@@ -207,6 +224,12 @@ app.put("/api/kategori/:id", async (req, res) => {
 app.delete("/api/kategori/:id", async (req, res) => {
     try {
         const id = Number(req.params.id);
+
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({
+                message: "ID kategori tidak valid",
+            });
+        }
 
         const [result]: any = await pool.query(
             "DELETE FROM kategori WHERE id_kategori = ?",
@@ -222,22 +245,181 @@ app.delete("/api/kategori/:id", async (req, res) => {
         res.json({
             message: "Berhasil menghapus kategori",
         });
-    } catch (error) {
+    } catch (error: any) {
+        if (error.code === "ER_ROW_IS_REFERENCED_2") {
+            return res.status(409).json({
+                message:
+                    "Kategori tidak dapat dihapus karena masih digunakan oleh artikel",
+            });
+        }
+
         res.status(500).json({
             message: "Gagal menghapus kategori",
         });
     }
 });
 
-app.get("/api/artikel", async (req, res) => {
+app.get("/api/penerbit", async (_req, res) => {
+    try {
+        const [rows] = await pool.query(
+            "SELECT * FROM penerbit ORDER BY id_penerbit ASC"
+        );
+
+        res.json({
+            message: "Berhasil mengambil data penerbit",
+            data: rows,
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Gagal mengambil data penerbit",
+        });
+    }
+});
+
+app.post("/api/penerbit", async (req, res) => {
+    try {
+        const validation = penerbitSchema.safeParse(
+            req.body
+        );
+
+        if (!validation.success) {
+            return res.status(400).json({
+                message: "Data tidak valid",
+                error: validation.error.issues,
+            });
+        }
+
+        const { nama_penerbit } = validation.data;
+
+        await pool.query(
+            `INSERT INTO penerbit
+            (nama_penerbit)
+            VALUES (?)`,
+            [nama_penerbit]
+        );
+
+        res.status(201).json({
+            message: "Berhasil menambahkan penerbit",
+        });
+    } catch (error: any) {
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                message: "Nama penerbit sudah digunakan",
+            });
+        }
+
+        res.status(500).json({
+            message: "Gagal menambahkan penerbit",
+        });
+    }
+});
+
+app.put("/api/penerbit/:id", async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({
+                message: "ID penerbit tidak valid",
+            });
+        }
+
+        const validation = penerbitSchema.safeParse(
+            req.body
+        );
+
+        if (!validation.success) {
+            return res.status(400).json({
+                message: "Data tidak valid",
+                error: validation.error.issues,
+            });
+        }
+
+        const { nama_penerbit } = validation.data;
+
+        const [result]: any = await pool.query(
+            `UPDATE penerbit
+            SET nama_penerbit = ?
+            WHERE id_penerbit = ?`,
+            [
+                nama_penerbit,
+                id,
+            ]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Penerbit tidak ditemukan",
+            });
+        }
+
+        res.json({
+            message: "Berhasil mengubah penerbit",
+        });
+    } catch (error: any) {
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                message: "Nama penerbit sudah digunakan",
+            });
+        }
+
+        res.status(500).json({
+            message: "Gagal mengubah penerbit",
+        });
+    }
+});
+
+app.delete("/api/penerbit/:id", async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({
+                message: "ID penerbit tidak valid",
+            });
+        }
+
+        const [result]: any = await pool.query(
+            "DELETE FROM penerbit WHERE id_penerbit = ?",
+            [id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Penerbit tidak ditemukan",
+            });
+        }
+
+        res.json({
+            message: "Berhasil menghapus penerbit",
+        });
+    } catch (error: any) {
+        if (error.code === "ER_ROW_IS_REFERENCED_2") {
+            return res.status(409).json({
+                message:
+                    "Penerbit tidak dapat dihapus karena masih digunakan oleh artikel",
+            });
+        }
+
+        res.status(500).json({
+            message: "Gagal menghapus penerbit",
+        });
+    }
+});
+
+app.get("/api/artikel", async (_req, res) => {
     try {
         const [rows] = await pool.query(`
-            SELECT 
+            SELECT
                 artikel.*,
-                kategori.nama_kategori
+                kategori.nama_kategori,
+                penerbit.nama_penerbit
             FROM artikel
             JOIN kategori
                 ON artikel.id_kategori = kategori.id_kategori
+            JOIN penerbit
+                ON artikel.id_penerbit = penerbit.id_penerbit
+            ORDER BY artikel.id_artikel DESC
         `);
 
         res.json({
@@ -247,6 +429,49 @@ app.get("/api/artikel", async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Gagal mengambil data artikel",
+        });
+    }
+});
+
+app.get("/api/artikel/:id", async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({
+                message: "ID artikel tidak valid",
+            });
+        }
+
+        const [rows]: any = await pool.query(
+            `
+            SELECT
+                artikel.*,
+                kategori.nama_kategori,
+                penerbit.nama_penerbit
+            FROM artikel
+            JOIN kategori
+                ON artikel.id_kategori = kategori.id_kategori
+            JOIN penerbit
+                ON artikel.id_penerbit = penerbit.id_penerbit
+            WHERE artikel.id_artikel = ?
+            `,
+            [id]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({
+                message: "Artikel tidak ditemukan",
+            });
+        }
+
+        res.json({
+            message: "Berhasil mengambil detail artikel",
+            data: rows[0],
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Gagal mengambil detail artikel",
         });
     }
 });
@@ -278,10 +503,10 @@ app.post(
 
             const {
                 id_kategori,
+                id_penerbit,
                 judul_artikel,
                 isi_artikel,
                 penulis_artikel,
-                penerbit_artikel,
             } = validation.data;
 
             const gambarPath = req.file
@@ -292,19 +517,19 @@ app.post(
                 `INSERT INTO artikel
                 (
                     id_kategori,
+                    id_penerbit,
                     judul_artikel,
                     isi_artikel,
                     penulis_artikel,
-                    penerbit_artikel,
                     gambar_artikel
                 )
                 VALUES (?, ?, ?, ?, ?, ?)`,
                 [
                     id_kategori,
+                    id_penerbit,
                     judul_artikel,
                     isi_artikel,
                     penulis_artikel,
-                    penerbit_artikel,
                     gambarPath,
                 ]
             );
@@ -312,7 +537,7 @@ app.post(
             res.status(201).json({
                 message: "Berhasil menambahkan artikel",
             });
-        } catch (error) {
+        } catch (error: any) {
             if (req.file) {
                 deleteFileIfExists(
                     path.join(
@@ -320,6 +545,15 @@ app.post(
                         req.file.filename
                     )
                 );
+            }
+
+            if (
+                error.code === "ER_NO_REFERENCED_ROW_2"
+            ) {
+                return res.status(400).json({
+                    message:
+                        "Kategori atau penerbit tidak ditemukan",
+                });
             }
 
             res.status(500).json({
@@ -335,6 +569,21 @@ app.put(
     async (req, res) => {
         try {
             const id = Number(req.params.id);
+
+            if (!Number.isInteger(id) || id <= 0) {
+                if (req.file) {
+                    deleteFileIfExists(
+                        path.join(
+                            "uploads",
+                            req.file.filename
+                        )
+                    );
+                }
+
+                return res.status(400).json({
+                    message: "ID artikel tidak valid",
+                });
+            }
 
             const validation = artikelSchema.safeParse(
                 req.body
@@ -358,80 +607,18 @@ app.put(
 
             const {
                 id_kategori,
+                id_penerbit,
                 judul_artikel,
                 isi_artikel,
                 penulis_artikel,
-                penerbit_artikel,
             } = validation.data;
 
-            let oldGambar: string | null = null;
+            const [oldRows]: any = await pool.query(
+                "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
+                [id]
+            );
 
-            if (req.file) {
-                const [rows]: any = await pool.query(
-                    "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
-                    [id]
-                );
-
-                if (rows.length > 0) {
-                    oldGambar = rows[0].gambar_artikel;
-                }
-            }
-
-            let query: string;
-            let params: any[];
-
-            if (req.file) {
-                const gambarPath =
-                    `uploads/${req.file.filename}`;
-
-                query = `
-                    UPDATE artikel
-                    SET id_kategori = ?,
-                        judul_artikel = ?,
-                        isi_artikel = ?,
-                        penulis_artikel = ?,
-                        penerbit_artikel = ?,
-                        gambar_artikel = ?
-                    WHERE id_artikel = ?
-                `;
-
-                params = [
-                    id_kategori,
-                    judul_artikel,
-                    isi_artikel,
-                    penulis_artikel,
-                    penerbit_artikel,
-                    gambarPath,
-                    id,
-                ];
-            } else {
-                query = `
-                    UPDATE artikel
-                    SET id_kategori = ?,
-                        judul_artikel = ?,
-                        isi_artikel = ?,
-                        penulis_artikel = ?,
-                        penerbit_artikel = ?
-                    WHERE id_artikel = ?
-                `;
-
-                params = [
-                    id_kategori,
-                    judul_artikel,
-                    isi_artikel,
-                    penulis_artikel,
-                    penerbit_artikel,
-                    id,
-                ];
-            }
-
-            const [result]: any =
-                await pool.query(
-                    query,
-                    params
-                );
-
-            if (result.affectedRows === 0) {
+            if (oldRows.length === 0) {
                 if (req.file) {
                     deleteFileIfExists(
                         path.join(
@@ -446,6 +633,72 @@ app.put(
                 });
             }
 
+            const oldGambar =
+                oldRows[0].gambar_artikel;
+
+            let query: string;
+            let params: any[];
+
+            if (req.file) {
+                const gambarPath =
+                    `uploads/${req.file.filename}`;
+
+                query = `
+                    UPDATE artikel
+                    SET id_kategori = ?,
+                        id_penerbit = ?,
+                        judul_artikel = ?,
+                        isi_artikel = ?,
+                        penulis_artikel = ?,
+                        gambar_artikel = ?
+                    WHERE id_artikel = ?
+                `;
+
+                params = [
+                    id_kategori,
+                    id_penerbit,
+                    judul_artikel,
+                    isi_artikel,
+                    penulis_artikel,
+                    gambarPath,
+                    id,
+                ];
+            } else {
+                query = `
+                    UPDATE artikel
+                    SET id_kategori = ?,
+                        id_penerbit = ?,
+                        judul_artikel = ?,
+                        isi_artikel = ?,
+                        penulis_artikel = ?
+                    WHERE id_artikel = ?
+                `;
+
+                params = [
+                    id_kategori,
+                    id_penerbit,
+                    judul_artikel,
+                    isi_artikel,
+                    penulis_artikel,
+                    id,
+                ];
+            }
+
+            try {
+                await pool.query(query, params);
+            } catch (error) {
+                if (req.file) {
+                    deleteFileIfExists(
+                        path.join(
+                            "uploads",
+                            req.file.filename
+                        )
+                    );
+                }
+
+                throw error;
+            }
+
             if (req.file && oldGambar) {
                 deleteFileIfExists(oldGambar);
             }
@@ -453,14 +706,14 @@ app.put(
             res.json({
                 message: "Berhasil mengubah artikel",
             });
-        } catch (error) {
-            if (req.file) {
-                deleteFileIfExists(
-                    path.join(
-                        "uploads",
-                        req.file.filename
-                    )
-                );
+        } catch (error: any) {
+            if (
+                error.code === "ER_NO_REFERENCED_ROW_2"
+            ) {
+                return res.status(400).json({
+                    message:
+                        "Kategori atau penerbit tidak ditemukan",
+                });
             }
 
             res.status(500).json({
@@ -476,16 +729,26 @@ app.delete(
         try {
             const id = Number(req.params.id);
 
+            if (!Number.isInteger(id) || id <= 0) {
+                return res.status(400).json({
+                    message: "ID artikel tidak valid",
+                });
+            }
+
             const [rows]: any =
                 await pool.query(
                     "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
                     [id]
                 );
 
+            if (rows.length === 0) {
+                return res.status(404).json({
+                    message: "Artikel tidak ditemukan",
+                });
+            }
+
             const gambarToDelete =
-                rows.length > 0
-                    ? rows[0].gambar_artikel
-                    : null;
+                rows[0].gambar_artikel;
 
             const [result]: any =
                 await pool.query(
