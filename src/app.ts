@@ -1,41 +1,3 @@
-// =====================================================
-// Backend Artikel - versi sederhana untuk pemula
-// -----------------------------------------------------
-// CARA JALAN:
-//   1. npm install
-//   2. npm run dev
-//   3. Buka http://localhost:8000
-//
-// CATATAN FLUTTER:
-//   - HP/emulator tidak bisa pakai "localhost".
-//     Emulator Android pakai: http://10.0.2.2:8000
-//     HP asli pakai IP laptop, contoh: http://192.168.1.5:8000
-//   - Semua jawaban dari server bentuknya JSON:
-//     Sukses GET  -> { "message": "...", "data": [...] }
-//     Sukses POST -> { "message": "..." }
-//     Gagal      -> { "message": "..." }
-//
-// DAFTAR ENDPOINT (jangan diubah biar Flutter tidak error):
-//   GET    /api/kategori
-//   POST   /api/kategori          body JSON: { nama_kategori }
-//   PUT    /api/kategori/:id      body JSON: { nama_kategori }
-//   DELETE /api/kategori/:id
-//
-//   GET    /api/penerbit
-//   POST   /api/penerbit          body JSON: { nama_penerbit }
-//   PUT    /api/penerbit/:id      body JSON: { nama_penerbit }
-//   DELETE /api/penerbit/:id
-//
-//   GET    /api/artikel
-//   GET    /api/artikel/:id
-//   POST   /api/artikel           body form-data + file kunci: gambar_artikel
-//   PUT    /api/artikel/:id       body form-data + file kunci: gambar_artikel (boleh tanpa file)
-//   DELETE /api/artikel/:id
-//
-//   Gambar bisa dibuka di: /uploads/namafile.jpg
-//   Contoh: http://localhost:8000/uploads/12345.jpg
-// =====================================================
-
 import express from "express";
 import cors from "cors";
 import multer from "multer";
@@ -47,26 +9,17 @@ import pool from "./db/index.ts";
 const app = express();
 const port = 8000;
 
-// Izinkan Flutter / web mengakses server ini
 app.use(cors());
 
-// Baca body JSON (untuk kategori & penerbit)
-// dan form-data teks (untuk artikel)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ---- Folder uploads ----
-// Semua gambar disimpan di folder "uploads"
-// dan bisa dibuka lewat http://localhost:8000/uploads/...
 const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 app.use("/uploads", express.static(uploadDir));
 
-// ---- Upload gambar (multer) ----
-// Aturan: hanya jpg/jpeg/png/webp, maksimal 5MB
-// Nama file dibuat unik biar tidak bentrok
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadDir),
@@ -76,7 +29,7 @@ const upload = multer({
       cb(null, namaUnik + ext);
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     const boleh = [".jpg", ".jpeg", ".png", ".webp"];
@@ -88,9 +41,6 @@ const upload = multer({
   },
 });
 
-// ---- Aturan validasi (zod) ----
-// Sama seperti streamerSchema di belajarExpress2,
-// hanya beda nama field-nya saja.
 const kategoriSchema = z.object({
   nama_kategori: z.string().min(1).max(100),
 });
@@ -107,11 +57,6 @@ const artikelSchema = z.object({
   penulis_artikel: z.string().min(1).max(100),
 });
 
-// =====================================================
-// HELPER KECIL (biar tidak tulis kode yang sama berulang)
-// =====================================================
-
-// Hapus 1 file kalau ada. Dipakai saat artikel dihapus / diganti gambarnya.
 function hapusFile(pathRelatif: string | null | undefined) {
   if (!pathRelatif) return;
   try {
@@ -120,16 +65,12 @@ function hapusFile(pathRelatif: string | null | undefined) {
   } catch {}
 }
 
-// Hapus file yang baru di-upload kalau ternyata datanya gagal.
-// Contoh: user upload gambar tapi judulnya kosong -> gambar sisa harus dibuang.
 function hapusFileBaru(req: any) {
   if (req.file) {
     hapusFile(path.join("uploads", req.file.filename));
   }
 }
 
-// Cek ID di URL, contoh: /api/kategori/3 -> 3
-// Kalau ID-nya aneh (huruf, 0, minus) langsung balas 400.
 function cekId(req: any, res: any, nama: string): number | null {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
@@ -139,8 +80,6 @@ function cekId(req: any, res: any, nama: string): number | null {
   return id;
 }
 
-// Cek body pakai zod. Kalau gagal langsung balas 400.
-// Cara pakai: const data = cekValidasi(kategoriSchema, req.body, res); if (!data) return;
 function cekValidasi(schema: any, body: any, res: any): any | null {
   const hasil = schema.safeParse(body);
   if (!hasil.success) {
@@ -152,10 +91,6 @@ function cekValidasi(schema: any, body: any, res: any): any | null {
   }
   return hasil.data;
 }
-
-// =====================================================
-// KATEGORI
-// =====================================================
 
 app.get("/api/kategori", async (_req, res) => {
   try {
@@ -233,10 +168,6 @@ app.delete("/api/kategori/:id", async (req, res) => {
   }
 });
 
-// =====================================================
-// PENERBIT (polanya sama persis dengan kategori)
-// =====================================================
-
 app.get("/api/penerbit", async (_req, res) => {
   try {
     const [rows] = await pool.query(
@@ -313,11 +244,6 @@ app.delete("/api/penerbit/:id", async (req, res) => {
   }
 });
 
-// =====================================================
-// ARTIKEL
-// =====================================================
-
-// Ambil semua artikel + nama kategori & penerbitnya (JOIN)
 app.get("/api/artikel", async (_req, res) => {
   try {
     const [rows] = await pool.query(`
@@ -333,7 +259,6 @@ app.get("/api/artikel", async (_req, res) => {
   }
 });
 
-// Ambil 1 artikel berdasarkan ID
 app.get("/api/artikel/:id", async (req, res) => {
   try {
     const id = cekId(req, res, "artikel");
@@ -358,16 +283,14 @@ app.get("/api/artikel/:id", async (req, res) => {
   }
 });
 
-// Tambah artikel + upload gambar (form-data, kunci file: gambar_artikel)
 app.post("/api/artikel", upload.single("gambar_artikel"), async (req, res) => {
   try {
     const data = cekValidasi(artikelSchema, req.body, res);
     if (!data) {
-      hapusFileBaru(req); // datanya salah -> buang gambarnya
+      hapusFileBaru(req);
       return;
     }
 
-    // Kalau tidak upload gambar, simpan NULL. Kalau ada, simpan "uploads/namafile.jpg"
     const gambarPath = req.file ? `uploads/${req.file.filename}` : null;
 
     await pool.query(
@@ -385,7 +308,7 @@ app.post("/api/artikel", upload.single("gambar_artikel"), async (req, res) => {
     );
     res.status(201).json({ message: "Berhasil menambahkan artikel" });
   } catch (error: any) {
-    hapusFileBaru(req); // gagal simpan ke DB -> buang gambarnya
+    hapusFileBaru(req);
     if (error.code === "ER_NO_REFERENCED_ROW_2") {
       return res
         .status(400)
@@ -395,8 +318,6 @@ app.post("/api/artikel", upload.single("gambar_artikel"), async (req, res) => {
   }
 });
 
-// Ubah artikel. Boleh ganti gambar, boleh tidak.
-// Trik sederhananya: gambarBaru = file baru kalau ada, kalau tidak pakai gambar lama.
 app.put(
   "/api/artikel/:id",
   upload.single("gambar_artikel"),
@@ -414,7 +335,6 @@ app.put(
         return;
       }
 
-      // 1. Cari gambar lama dulu
       const [oldRows]: any = await pool.query(
         "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
         [id],
@@ -426,7 +346,6 @@ app.put(
       const gambarLama = oldRows[0].gambar_artikel;
       const gambarBaru = req.file ? `uploads/${req.file.filename}` : gambarLama;
 
-      // 2. Update semuanya dalam 1 query (tidak perlu if/else 2 query)
       try {
         await pool.query(
           `UPDATE artikel SET
@@ -444,11 +363,10 @@ app.put(
           ],
         );
       } catch (error) {
-        hapusFileBaru(req); // update gagal -> buang file baru
+        hapusFileBaru(req);
         throw error;
       }
 
-      // 3. Kalau update sukses dan ada file baru, hapus file lama biar tidak menumpuk
       if (req.file && gambarLama) hapusFile(gambarLama);
 
       res.json({ message: "Berhasil mengubah artikel" });
@@ -458,14 +376,12 @@ app.put(
           .status(400)
           .json({ message: "Kategori atau penerbit tidak ditemukan" });
       }
-      // Kalau error sudah dibalas di atas (400/404), jangan balas 2x
       if (res.headersSent) return;
       res.status(500).json({ message: "Gagal mengubah artikel" });
     }
   },
 );
 
-// Hapus artikel + hapus file gambarnya
 app.delete("/api/artikel/:id", async (req, res) => {
   try {
     const id = cekId(req, res, "artikel");
@@ -494,9 +410,6 @@ app.delete("/api/artikel/:id", async (req, res) => {
   }
 });
 
-// =====================================================
-// PENANGAN ERROR UPLOAD (wajib paling bawah, sebelum listen)
-// =====================================================
 app.use(
   (
     err: any,
@@ -504,14 +417,12 @@ app.use(
     res: express.Response,
     _next: express.NextFunction,
   ) => {
-    // File kebesaran (>5MB)
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
         return res.status(400).json({ message: "Ukuran file maksimal 5MB" });
       }
       return res.status(400).json({ message: err.message });
     }
-    // File bukan gambar
     if (err?.message === "Hanya file jpg, png, webp yang diperbolehkan") {
       return res.status(400).json({ message: err.message });
     }
