@@ -160,7 +160,7 @@ function cekValidasi(schema: any, body: any, res: any): any | null {
 app.get("/api/kategori", async (_req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT * FROM kategori ORDER BY id_kategori ASC"
+      "SELECT * FROM kategori ORDER BY id_kategori ASC",
     );
     res.json({ message: "Berhasil mengambil data kategori", data: rows });
   } catch {
@@ -195,7 +195,7 @@ app.put("/api/kategori/:id", async (req, res) => {
 
     const [result]: any = await pool.query(
       "UPDATE kategori SET nama_kategori = ? WHERE id_kategori = ?",
-      [data.nama_kategori, id]
+      [data.nama_kategori, id],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Kategori tidak ditemukan" });
@@ -216,7 +216,7 @@ app.delete("/api/kategori/:id", async (req, res) => {
 
     const [result]: any = await pool.query(
       "DELETE FROM kategori WHERE id_kategori = ?",
-      [id]
+      [id],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Kategori tidak ditemukan" });
@@ -225,7 +225,8 @@ app.delete("/api/kategori/:id", async (req, res) => {
   } catch (error: any) {
     if (error.code === "ER_ROW_IS_REFERENCED_2") {
       return res.status(409).json({
-        message: "Kategori tidak dapat dihapus karena masih digunakan oleh artikel",
+        message:
+          "Kategori tidak dapat dihapus karena masih digunakan oleh artikel",
       });
     }
     res.status(500).json({ message: "Gagal menghapus kategori" });
@@ -239,7 +240,7 @@ app.delete("/api/kategori/:id", async (req, res) => {
 app.get("/api/penerbit", async (_req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT * FROM penerbit ORDER BY id_penerbit ASC"
+      "SELECT * FROM penerbit ORDER BY id_penerbit ASC",
     );
     res.json({ message: "Berhasil mengambil data penerbit", data: rows });
   } catch {
@@ -274,7 +275,7 @@ app.put("/api/penerbit/:id", async (req, res) => {
 
     const [result]: any = await pool.query(
       "UPDATE penerbit SET nama_penerbit = ? WHERE id_penerbit = ?",
-      [data.nama_penerbit, id]
+      [data.nama_penerbit, id],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Penerbit tidak ditemukan" });
@@ -295,7 +296,7 @@ app.delete("/api/penerbit/:id", async (req, res) => {
 
     const [result]: any = await pool.query(
       "DELETE FROM penerbit WHERE id_penerbit = ?",
-      [id]
+      [id],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Penerbit tidak ditemukan" });
@@ -304,7 +305,8 @@ app.delete("/api/penerbit/:id", async (req, res) => {
   } catch (error: any) {
     if (error.code === "ER_ROW_IS_REFERENCED_2") {
       return res.status(409).json({
-        message: "Penerbit tidak dapat dihapus karena masih digunakan oleh artikel",
+        message:
+          "Penerbit tidak dapat dihapus karena masih digunakan oleh artikel",
       });
     }
     res.status(500).json({ message: "Gagal menghapus penerbit" });
@@ -345,7 +347,7 @@ app.get("/api/artikel/:id", async (req, res) => {
       JOIN penerbit ON artikel.id_penerbit = penerbit.id_penerbit
       WHERE artikel.id_artikel = ?
       `,
-      [id]
+      [id],
     );
     if (rows.length === 0) {
       return res.status(404).json({ message: "Artikel tidak ditemukan" });
@@ -379,7 +381,7 @@ app.post("/api/artikel", upload.single("gambar_artikel"), async (req, res) => {
         data.isi_artikel,
         data.penulis_artikel,
         gambarPath,
-      ]
+      ],
     );
     res.status(201).json({ message: "Berhasil menambahkan artikel" });
   } catch (error: any) {
@@ -395,69 +397,73 @@ app.post("/api/artikel", upload.single("gambar_artikel"), async (req, res) => {
 
 // Ubah artikel. Boleh ganti gambar, boleh tidak.
 // Trik sederhananya: gambarBaru = file baru kalau ada, kalau tidak pakai gambar lama.
-app.put("/api/artikel/:id", upload.single("gambar_artikel"), async (req, res) => {
-  try {
-    const id = cekId(req, res, "artikel");
-    if (!id) {
-      hapusFileBaru(req);
-      return;
-    }
-
-    const data = cekValidasi(artikelSchema, req.body, res);
-    if (!data) {
-      hapusFileBaru(req);
-      return;
-    }
-
-    // 1. Cari gambar lama dulu
-    const [oldRows]: any = await pool.query(
-      "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
-      [id]
-    );
-    if (oldRows.length === 0) {
-      hapusFileBaru(req);
-      return res.status(404).json({ message: "Artikel tidak ditemukan" });
-    }
-    const gambarLama = oldRows[0].gambar_artikel;
-    const gambarBaru = req.file ? `uploads/${req.file.filename}` : gambarLama;
-
-    // 2. Update semuanya dalam 1 query (tidak perlu if/else 2 query)
+app.put(
+  "/api/artikel/:id",
+  upload.single("gambar_artikel"),
+  async (req, res) => {
     try {
-      await pool.query(
-        `UPDATE artikel SET
+      const id = cekId(req, res, "artikel");
+      if (!id) {
+        hapusFileBaru(req);
+        return;
+      }
+
+      const data = cekValidasi(artikelSchema, req.body, res);
+      if (!data) {
+        hapusFileBaru(req);
+        return;
+      }
+
+      // 1. Cari gambar lama dulu
+      const [oldRows]: any = await pool.query(
+        "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
+        [id],
+      );
+      if (oldRows.length === 0) {
+        hapusFileBaru(req);
+        return res.status(404).json({ message: "Artikel tidak ditemukan" });
+      }
+      const gambarLama = oldRows[0].gambar_artikel;
+      const gambarBaru = req.file ? `uploads/${req.file.filename}` : gambarLama;
+
+      // 2. Update semuanya dalam 1 query (tidak perlu if/else 2 query)
+      try {
+        await pool.query(
+          `UPDATE artikel SET
            id_kategori = ?, id_penerbit = ?, judul_artikel = ?,
            isi_artikel = ?, penulis_artikel = ?, gambar_artikel = ?
          WHERE id_artikel = ?`,
-        [
-          data.id_kategori,
-          data.id_penerbit,
-          data.judul_artikel,
-          data.isi_artikel,
-          data.penulis_artikel,
-          gambarBaru,
-          id,
-        ]
-      );
-    } catch (error) {
-      hapusFileBaru(req); // update gagal -> buang file baru
-      throw error;
-    }
+          [
+            data.id_kategori,
+            data.id_penerbit,
+            data.judul_artikel,
+            data.isi_artikel,
+            data.penulis_artikel,
+            gambarBaru,
+            id,
+          ],
+        );
+      } catch (error) {
+        hapusFileBaru(req); // update gagal -> buang file baru
+        throw error;
+      }
 
-    // 3. Kalau update sukses dan ada file baru, hapus file lama biar tidak menumpuk
-    if (req.file && gambarLama) hapusFile(gambarLama);
+      // 3. Kalau update sukses dan ada file baru, hapus file lama biar tidak menumpuk
+      if (req.file && gambarLama) hapusFile(gambarLama);
 
-    res.json({ message: "Berhasil mengubah artikel" });
-  } catch (error: any) {
-    if (error.code === "ER_NO_REFERENCED_ROW_2") {
-      return res
-        .status(400)
-        .json({ message: "Kategori atau penerbit tidak ditemukan" });
+      res.json({ message: "Berhasil mengubah artikel" });
+    } catch (error: any) {
+      if (error.code === "ER_NO_REFERENCED_ROW_2") {
+        return res
+          .status(400)
+          .json({ message: "Kategori atau penerbit tidak ditemukan" });
+      }
+      // Kalau error sudah dibalas di atas (400/404), jangan balas 2x
+      if (res.headersSent) return;
+      res.status(500).json({ message: "Gagal mengubah artikel" });
     }
-    // Kalau error sudah dibalas di atas (400/404), jangan balas 2x
-    if (res.headersSent) return;
-    res.status(500).json({ message: "Gagal mengubah artikel" });
-  }
-});
+  },
+);
 
 // Hapus artikel + hapus file gambarnya
 app.delete("/api/artikel/:id", async (req, res) => {
@@ -467,7 +473,7 @@ app.delete("/api/artikel/:id", async (req, res) => {
 
     const [rows]: any = await pool.query(
       "SELECT gambar_artikel FROM artikel WHERE id_artikel = ?",
-      [id]
+      [id],
     );
     if (rows.length === 0) {
       return res.status(404).json({ message: "Artikel tidak ditemukan" });
@@ -475,7 +481,7 @@ app.delete("/api/artikel/:id", async (req, res) => {
 
     const [result]: any = await pool.query(
       "DELETE FROM artikel WHERE id_artikel = ?",
-      [id]
+      [id],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Artikel tidak ditemukan" });
@@ -496,7 +502,7 @@ app.use(
     err: any,
     _req: express.Request,
     res: express.Response,
-    _next: express.NextFunction
+    _next: express.NextFunction,
   ) => {
     // File kebesaran (>5MB)
     if (err instanceof multer.MulterError) {
@@ -513,11 +519,11 @@ app.use(
       console.error(err);
       return res.status(500).json({ message: "Terjadi kesalahan server" });
     }
-  }
+  },
 );
 
 app.listen(port, "0.0.0.0", () => {
   console.log(
-    `Server berjalan di http://0.0.0.0:${port} dan http://localhost:${port}`
+    `Server berjalan di http://0.0.0.0:${port} dan http://localhost:${port}`,
   );
 });
